@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./waseda-grade-api
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./tmp:/app/tmp
+      - ./list:/app/list
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3001:3001"
+    depends_on:
+      - backend
+    environment:
+      - BACKEND_URL=http://backend:8001
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: seiseki
+      MYSQL_USER: seiseki
+      MYSQL_PASSWORD: seiseki-mitai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
