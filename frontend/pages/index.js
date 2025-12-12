@@ -117,7 +117,8 @@ export default function Home() {
           <div className="result">{result.average_score}</div>
           
           <p>Student ID: {result.student_id}</p>
-          <button onClick={handleRetry}>Check Another</button>
+          <button onClick={handleRetry}>もう見ました、満足！
+        </button>
         </div>
       )}
 
