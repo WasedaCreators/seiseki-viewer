@@ -10,6 +10,9 @@ services:
       - ./list:/app/list
     environment:
       - PYTHONUNBUFFERED=1
+      - MYSQL_USER=seiseki
+      - MYSQL_PASSWORD=seiseki-mitai
+      - MYSQL_DATABASE=seiseki
 
   frontend:
     build: ./frontend
