@@ -523,10 +523,7 @@ def parse_grades(html_content):
 
 class AdminLogin(BaseModel):
     username: str
-    password: str = Field(..., alias="token")
-
-    class Config:
-        allow_population_by_field_name = True
+    password: str
 
 def get_user_password_hash(username: str):
     conn = None
