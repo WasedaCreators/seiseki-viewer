@@ -19,7 +19,7 @@ import datetime
 import math
 import mysql.connector
 import hashlib
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -93,6 +93,24 @@ def init_db():
                     timestamp DATETIME
                 )
             """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(255) UNIQUE,
+                    pw VARCHAR(128)
+                )
+            """)
+
+            # Ensure legacy tables have the columns we now rely on
+            cursor.execute("SHOW COLUMNS FROM users LIKE 'username'")
+            if cursor.fetchone() is None:
+                cursor.execute("ALTER TABLE users ADD COLUMN username VARCHAR(255) UNIQUE AFTER id")
+
+            cursor.execute("SHOW COLUMNS FROM users LIKE 'pw'")
+            pw_column = cursor.fetchone()
+            if pw_column and pw_column[1].lower() != "varchar(128)":
+                cursor.execute("ALTER TABLE users MODIFY pw VARCHAR(128)")
             
             conn.commit()
             
@@ -505,23 +523,61 @@ def parse_grades(html_content):
 
 class AdminLogin(BaseModel):
     username: str
-    token: str
+    password: str = Field(..., alias="token")
 
-ADMIN_USERNAME = "superdangomushi"
-ADMIN_TOKEN_HASH = "9ee487132706c0541630c96aa00f9056408cf778d37b4948b4872be327b1c9b674fb2f5c774b31e755fa8c109d9ca461bb61a264ca14cf8c72917d32dab0c44a"
+    class Config:
+        allow_population_by_field_name = True
+
+def get_user_password_hash(username: str):
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT pw FROM users WHERE username = %s", (username,))
+        result = cursor.fetchone()
+        if result:
+            return result.get("pw")
+    except Exception as e:
+        print(f"Failed to fetch credentials for {username}: {e}")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+    return None
 
 def verify_token(token: str) -> bool:
     if not token:
         return False
     hashed_token = hashlib.sha512(token.encode()).hexdigest()
-    return hashed_token == ADMIN_TOKEN_HASH
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM users WHERE pw = %s", (hashed_token,))
+        return cursor.fetchone() is not None
+    except Exception as e:
+        print(f"Token verification failed: {e}")
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 @app.post("/admin/login")
 async def admin_login(data: AdminLogin):
-    if data.username == ADMIN_USERNAME and verify_token(data.token):
-        return {"status": "success", "message": "Login successful"}
-    else:
+    stored_hash = get_user_password_hash(data.username)
+    if not stored_hash:
         return JSONResponse(content={"status": "error", "message": "Invalid credentials"}, status_code=401)
+
+    incoming_hash = hashlib.sha512(data.password.encode()).hexdigest()
+    if incoming_hash == stored_hash:
+        return {"status": "success", "message": "Login successful"}
+
+    return JSONResponse(content={"status": "error", "message": "Invalid credentials"}, status_code=401)
 
 @app.get("/admin/data")
 async def get_admin_data(request: Request):
