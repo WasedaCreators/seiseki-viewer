@@ -41,9 +41,30 @@ sudo apt-get install -y chromium-browser
 
 Docker Composeを使用して実行することも可能です。
 
+### 環境変数の設定（オプション）
+
+本番環境では、セキュリティのためデータベース認証情報を変更することを推奨します。
+
+1. `.env.example`をコピーして`.env`ファイルを作成
+   ```bash
+   cp .env.example .env
+   ```
+
+2. `.env`ファイルを編集し、安全なパスワードを設定
+   ```bash
+   MYSQL_USER=seiseki
+   MYSQL_PASSWORD=your-secure-password-here
+   MYSQL_DATABASE=seiseki
+   MYSQL_ROOT_PASSWORD=your-root-password-here
+   ```
+
+### 起動
+
 ```bash
 docker compose up -d --build
 ```
+
+※ `.env`ファイルが存在しない場合は、デフォルトの開発用認証情報が使用されます。
 
 ## 機能
 
