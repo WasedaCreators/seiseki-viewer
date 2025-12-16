@@ -5,7 +5,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 export default function Admin() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
-  const [token, setToken] = useState('');
+  const [password, setPassword] = useState('');
+  const [authToken, setAuthToken] = useState('');
   const [data, setData] = useState([]);
   const [stats, setStats] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -18,7 +19,7 @@ export default function Admin() {
     const tokenCookie = cookies.find(c => c.trim().startsWith('admin_token='));
     if (tokenCookie) {
       const t = tokenCookie.split('=')[1];
-      setToken(t);
+      setAuthToken(t);
       setIsLoggedIn(true);
       fetchData(t);
     }
@@ -28,12 +29,13 @@ export default function Admin() {
     e.preventDefault();
     setErrorMsg('');
     try {
-      const res = await axios.post('/api/admin/login', { username, token });
+      const res = await axios.post('/api/admin/login', { username, password });
       if (res.data.status === 'success') {
         // Set cookie for 10 minutes (600 seconds)
-        document.cookie = `admin_token=${token}; max-age=600; path=/`;
+        document.cookie = `admin_token=${password}; max-age=600; path=/`;
+        setAuthToken(password);
         setIsLoggedIn(true);
-        fetchData(token);
+        fetchData(password);
       }
     } catch (err) {
       setErrorMsg('Login failed: Invalid credentials');
@@ -61,9 +63,9 @@ export default function Admin() {
     if (!confirm('Are you sure you want to delete this record?')) return;
     try {
       await axios.delete(`/api/admin/student/${id}`, {
-        headers: { 'X-Admin-Token': token }
+        headers: { 'X-Admin-Token': authToken }
       });
-      fetchData(token);
+      fetchData(authToken);
     } catch (err) {
       alert('Delete failed');
     }
@@ -82,10 +84,10 @@ export default function Admin() {
   const handleUpdate = async (id) => {
     try {
       await axios.put(`/api/admin/student/${id}`, { avg_gpa: parseFloat(editValue) }, {
-        headers: { 'X-Admin-Token': token }
+        headers: { 'X-Admin-Token': authToken }
       });
       setEditingId(null);
-      fetchData(token);
+      fetchData(authToken);
     } catch (err) {
       alert('Update failed');
     }
@@ -179,9 +181,9 @@ export default function Admin() {
           <div style={{ marginBottom: '10px' }}>
             <input
               type="password"
-              placeholder="Token"
-              value={token}
-              onChange={e => setToken(e.target.value)}
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
               style={{ width: '100%', padding: '8px' }}
             />
           </div>

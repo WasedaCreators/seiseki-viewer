@@ -4,13 +4,18 @@ import os
 import time
 
 def get_db_connection():
+    # Get credentials from environment variables with defaults for backward compatibility
+    db_user = os.getenv("MYSQL_USER", "seiseki")
+    db_password = os.getenv("MYSQL_PASSWORD", "seiseki-mitai")
+    db_name = os.getenv("MYSQL_DATABASE", "seiseki")
+    
     # Try connecting to 'mysql' host (docker) first, then localhost
     try:
         conn = mysql.connector.connect(
             host="mysql",
-            user="seiseki",
-            password="seiseki-mitai",
-            database="seiseki",
+            user=db_user,
+            password=db_password,
+            database=db_name,
             connection_timeout=3
         )
         print("Connected to MySQL (Docker)")
@@ -21,9 +26,9 @@ def get_db_connection():
     try:
         conn = mysql.connector.connect(
             host="127.0.0.1",
-            user="seiseki",
-            password="seiseki-mitai",
-            database="seiseki",
+            user=db_user,
+            password=db_password,
+            database=db_name,
             connection_timeout=3
         )
         print("Connected to MySQL (Localhost)")

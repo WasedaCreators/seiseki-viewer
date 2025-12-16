@@ -10,6 +10,9 @@ services:
       - ./list:/app/list
     environment:
       - PYTHONUNBUFFERED=1
+      - MYSQL_USER=${MYSQL_USER:-seiseki}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-seiseki-mitai}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-seiseki}
 
   frontend:
     build: ./frontend
@@ -23,10 +26,10 @@ services:
   mysql:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: seiseki
-      MYSQL_USER: seiseki
-      MYSQL_PASSWORD: seiseki-mitai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-seiseki}
+      MYSQL_USER: ${MYSQL_USER:-seiseki}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-seiseki-mitai}
     ports:
       - "3306:3306"
     volumes:
