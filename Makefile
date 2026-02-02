@@ -20,10 +20,15 @@ help:
 	@echo "  run-backend   - Start backend only"
 	@echo "  run-frontend  - Start frontend only"
 	@echo ""
+	@echo "Database targets:"
+	@echo "  migrate-db    - Add lab preference columns to existing database"
+	@echo "  show-schema   - Show current gpadata table schema"
+	@echo "  show-database - Show database contents (GPA & lab preferences)"
+	@echo "  hash          - Migrate student IDs to SHA-256 hashes"
+	@echo ""
 	@echo "Other targets:"
 	@echo "  stop          - Stop all running processes"
 	@echo "  clean         - Remove build artifacts and dependencies"
-	@echo "  hash          - Migrate student IDs to SHA-256 hashes"
 
 install: system-deps backend-deps frontend-deps setup-db build-frontend
 	@echo ""
@@ -182,6 +187,46 @@ clean:
 hash:
 	@echo "Migrating student IDs to SHA-256 hashes..."
 	cd waseda-grade-api && .venv/bin/python migrate_hashes.py
+
+migrate-db:
+	@echo "=============================================="
+	@echo "Migrating Database Schema..."
+	@echo "=============================================="
+	@sudo service mysql start || sudo systemctl start mysql || true
+	@# Add lab preference columns if they don't exist
+	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_1 VARCHAR(50);" 2>/dev/null || echo "lab_choice_1 column already exists"
+	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_2 VARCHAR(50);" 2>/dev/null || echo "lab_choice_2 column already exists"
+	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_3 VARCHAR(50);" 2>/dev/null || echo "lab_choice_3 column already exists"
+	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_4 VARCHAR(50);" 2>/dev/null || echo "lab_choice_4 column already exists"
+	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_5 VARCHAR(50);" 2>/dev/null || echo "lab_choice_5 column already exists"
+	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_6 VARCHAR(50);" 2>/dev/null || echo "lab_choice_6 column already exists"
+	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN uses_recommendation BOOLEAN;" 2>/dev/null || echo "uses_recommendation column already exists"
+	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_updated_at DATETIME;" 2>/dev/null || echo "lab_updated_at column already exists"
+	@echo "Database migration complete."
+
+show-schema:
+	@echo "=============================================="
+	@echo "Current Database Schema (gpadata table):"
+	@echo "=============================================="
+	@sudo service mysql start || sudo systemctl start mysql || true
+	sudo mysql seiseki -e "DESCRIBE gpadata;"
+
+show-database:
+	@echo "=============================================="
+	@echo "Database Contents (gpadata table)"
+	@echo "=============================================="
+	@sudo service mysql start || sudo systemctl start mysql || true
+	@echo ""
+	@echo "--- Summary ---"
+	@sudo mysql seiseki -e "SELECT COUNT(*) AS '総レコード数', COUNT(avg_gpa) AS 'GPA登録数', COUNT(lab_choice_1) AS '研究室志望登録数' FROM gpadata;"
+	@echo ""
+	@echo "--- GPA Data (student_id is hashed) ---"
+	@sudo mysql seiseki -e "SELECT CONCAT(LEFT(student_id, 8), '...') AS student_id_short, ROUND(avg_gpa, 2) AS avg_gpa, timestamp FROM gpadata WHERE avg_gpa IS NOT NULL ORDER BY timestamp DESC LIMIT 20;" 2>/dev/null || echo "No GPA data"
+	@echo ""
+	@echo "--- Lab Preferences ---"
+	@sudo mysql seiseki -e "SELECT CONCAT(LEFT(student_id, 8), '...') AS student_id_short, lab_choice_1 AS '第1希望', lab_choice_2 AS '第2希望', lab_choice_3 AS '第3希望', CASE WHEN uses_recommendation THEN '○' ELSE '×' END AS '自己推薦', lab_updated_at FROM gpadata WHERE lab_choice_1 IS NOT NULL ORDER BY lab_updated_at DESC LIMIT 20;" 2>/dev/null || echo "No lab preference data"
+	@echo ""
+	@echo "(Showing latest 20 records each)"
 
 # =============================================================================
 # Development Targets

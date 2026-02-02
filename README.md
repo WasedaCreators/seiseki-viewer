@@ -1,41 +1,63 @@
 # Waseda Grade Checker
 
-早稲田大学の成績を自動取得し、必修科目の平均点や偏差値、度数分布を表示するwebアプリです。
+早稲田大学の成績を自動取得し、必修科目の平均点や偏差値、度数分布を表示するwebアプリです。  
+研究室志望情報（Moodle Quiz）の取得・保存にも対応しています。
 
 ## 構成
 
 - **Frontend**: Next.js (Port 3001)
 - **Backend**: Python FastAPI + Selenium (Port 8001)
+- **Database**: MySQL
 
-## 実行方法 (Ubuntu / macOS)
+## クイックスタート (Ubuntu 22.04)
 
-### 前提条件
-
-- Python 3.10+
-- Node.js 18+
-- Google Chrome または Chromium (BackendでSeleniumを使用するため)
-
-**UbuntuでのChromeインストール例:**
 ```bash
-sudo apt-get update
-sudo apt-get install -y chromium-browser
+# 1. 全ての依存関係をインストール（初回のみ）
+make install
+
+# 2. アプリケーションを起動
+make run
 ```
 
-### セットアップと実行
+起動後、ブラウザで [http://localhost:3001](http://localhost:3001) にアクセスしてください。
 
-`make` コマンドを使用して簡単に実行できます。
+## Makeコマンド一覧
 
-1. **依存関係のインストール**
-   ```bash
-   make install
-   ```
+### セットアップ
 
-2. **アプリケーションの起動**
-   ```bash
-   make run
-   ```
-   
-   起動後、ブラウザで [http://localhost:3001](http://localhost:3001) にアクセスしてください。
+| コマンド | 説明 |
+|----------|------|
+| `make install` | 全ての依存関係をインストール（初回セットアップ） |
+| `make system-deps` | システムパッケージをインストール（Python, Node.js, Chrome, MySQL） |
+| `make backend-deps` | Python仮想環境に依存関係をインストール |
+| `make frontend-deps` | Node.js依存関係をインストール |
+| `make setup-db` | MySQLデータベースをセットアップ |
+| `make build-frontend` | フロントエンドをビルド |
+
+### 実行
+
+| コマンド | 説明 |
+|----------|------|
+| `make run` | バックエンドとフロントエンドを両方起動 |
+| `make run-backend` | バックエンドのみ起動 |
+| `make run-frontend` | フロントエンドのみ起動 |
+| `make stop` | 全てのプロセスを停止 |
+
+### データベース管理
+
+| コマンド | 説明 |
+|----------|------|
+| `make migrate-db` | 研究室志望カラムを既存DBに追加 |
+| `make show-schema` | gpadataテーブルの構造を表示 |
+| `make show-database` | データベースの中身を表示（GPA・研究室志望） |
+| `make hash` | 学生IDをSHA-256ハッシュに移行(グループラインに公開した段階でハッシュ化は導入済みのため廃止予定) |
+
+### その他
+
+| コマンド | 説明 |
+|----------|------|
+| `make clean` | ビルド成果物と依存関係を削除 |
+| `make help` | 利用可能なコマンド一覧を表示 |
 
 ## Dockerを使用する場合
 
@@ -49,5 +71,19 @@ docker compose up -d --build
 
 - 成績の自動取得（Microsoft Entra ID認証対応）
 - 必修科目の重み付け平均点算出
-- 偏差値・順位の表示(現状/adminのみ)
-- 度数分布グラフの表示(現状/adminのみ)
+- 偏差値・順位の表示 (adminページ)
+- 度数分布グラフの表示 (adminページ)
+- 研究室志望情報の取得・保存（Moodle Quiz連携）
+
+## データベース構造
+
+`gpadata` テーブル:
+
+| カラム | 型 | 説明 |
+|--------|------|------|
+| student_id | VARCHAR(64) | 学生ID（SHA-256ハッシュ） |
+| avg_gpa | FLOAT | 必修科目平均GPA |
+| timestamp | DATETIME | GPA更新日時 |
+| lab_choice_1〜6 | VARCHAR(50) | 第1〜6希望研究室 |
+| uses_recommendation | BOOLEAN | 自己推薦利用有無 |
+| lab_updated_at | DATETIME | 研究室志望更新日時 |

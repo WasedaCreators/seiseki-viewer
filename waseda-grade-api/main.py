@@ -278,6 +278,10 @@ def fetch_kenkyushitu_page(driver, student_id="unknown"):
             uses_recommendation = lab_preferences_found.get('自己推薦', False)
             recommendation_str = "あり" if uses_recommendation else "なし"
             print(f"[KENKYUSHITU] {student_id} 第1希望: {first_choice} / 自己推薦: {recommendation_str}")
+            
+            # データベースに保存
+            if student_id != "unknown":
+                save_lab_preferences(student_id, lab_preferences_found)
         else:
             print(f"[KENKYUSHITU] {student_id}: 研究室志望情報が見つかりませんでした")
         print("=" * 60)
@@ -310,9 +314,34 @@ def init_db():
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     student_id VARCHAR(64) UNIQUE,
                     avg_gpa FLOAT,
-                    timestamp DATETIME
+                    timestamp DATETIME,
+                    lab_choice_1 VARCHAR(50),
+                    lab_choice_2 VARCHAR(50),
+                    lab_choice_3 VARCHAR(50),
+                    lab_choice_4 VARCHAR(50),
+                    lab_choice_5 VARCHAR(50),
+                    lab_choice_6 VARCHAR(50),
+                    uses_recommendation BOOLEAN,
+                    lab_updated_at DATETIME
                 )
             """)
+            
+            # Add columns if they don't exist (for existing databases)
+            alter_statements = [
+                "ALTER TABLE gpadata ADD COLUMN lab_choice_1 VARCHAR(50)",
+                "ALTER TABLE gpadata ADD COLUMN lab_choice_2 VARCHAR(50)",
+                "ALTER TABLE gpadata ADD COLUMN lab_choice_3 VARCHAR(50)",
+                "ALTER TABLE gpadata ADD COLUMN lab_choice_4 VARCHAR(50)",
+                "ALTER TABLE gpadata ADD COLUMN lab_choice_5 VARCHAR(50)",
+                "ALTER TABLE gpadata ADD COLUMN lab_choice_6 VARCHAR(50)",
+                "ALTER TABLE gpadata ADD COLUMN uses_recommendation BOOLEAN",
+                "ALTER TABLE gpadata ADD COLUMN lab_updated_at DATETIME",
+            ]
+            for stmt in alter_statements:
+                try:
+                    cursor.execute(stmt)
+                except Exception:
+                    pass  # Column already exists
             
             conn.commit()
             
@@ -325,6 +354,56 @@ def init_db():
             time.sleep(retry_delay)
     
     print("Could not initialize database after multiple attempts.")
+
+
+def save_lab_preferences(student_id: str, preferences: dict):
+    """研究室志望情報をデータベースに保存する"""
+    if not preferences:
+        return False
+    
+    # Hash student_id (same as GPA data)
+    hashed_student_id = hashlib.sha256(hashlib.sha512(student_id.encode()).hexdigest().encode()).hexdigest()
+    
+    timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Extract preferences
+        lab_choice_1 = preferences.get('第1希望', None)
+        lab_choice_2 = preferences.get('第2希望', None)
+        lab_choice_3 = preferences.get('第3希望', None)
+        lab_choice_4 = preferences.get('第4希望', None)
+        lab_choice_5 = preferences.get('第5希望', None)
+        lab_choice_6 = preferences.get('第6希望', None)
+        uses_recommendation = preferences.get('自己推薦', False)
+        
+        # Update existing record or insert new one
+        cursor.execute("""
+            INSERT INTO gpadata (student_id, lab_choice_1, lab_choice_2, lab_choice_3, 
+                                 lab_choice_4, lab_choice_5, lab_choice_6, 
+                                 uses_recommendation, lab_updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE 
+                lab_choice_1 = %s, lab_choice_2 = %s, lab_choice_3 = %s,
+                lab_choice_4 = %s, lab_choice_5 = %s, lab_choice_6 = %s,
+                uses_recommendation = %s, lab_updated_at = %s
+        """, (hashed_student_id, lab_choice_1, lab_choice_2, lab_choice_3,
+              lab_choice_4, lab_choice_5, lab_choice_6, uses_recommendation, timestamp_str,
+              lab_choice_1, lab_choice_2, lab_choice_3,
+              lab_choice_4, lab_choice_5, lab_choice_6, uses_recommendation, timestamp_str))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        print(f"[KENKYUSHITU] Lab preferences saved for {hashed_student_id[:16]}...")
+        return True
+        
+    except Exception as e:
+        print(f"[KENKYUSHITU] Database error: {e}")
+        return False
 
 
 @app.get("/", response_class=HTMLResponse)
