@@ -1,58 +1,196 @@
-.PHONY: install system-deps setup-db backend-deps frontend-deps build-frontend run clean
+.PHONY: install system-deps setup-db backend-deps frontend-deps build-frontend run run-backend run-frontend clean stop help
 
-install: system-deps setup-db backend-deps frontend-deps build-frontend
+# =============================================================================
+# Main Targets
+# =============================================================================
+
+help:
+	@echo "Usage: make <target>"
+	@echo ""
+	@echo "Setup targets:"
+	@echo "  install       - Install all dependencies (run this first on fresh Ubuntu 22.04)"
+	@echo "  system-deps   - Install system packages (Python, Node.js, Chrome, MySQL)"
+	@echo "  backend-deps  - Install Python dependencies in virtual environment"
+	@echo "  frontend-deps - Install Node.js dependencies"
+	@echo "  setup-db      - Setup MySQL database"
+	@echo "  build-frontend- Build frontend for production"
+	@echo ""
+	@echo "Run targets:"
+	@echo "  run           - Start both backend and frontend"
+	@echo "  run-backend   - Start backend only"
+	@echo "  run-frontend  - Start frontend only"
+	@echo ""
+	@echo "Other targets:"
+	@echo "  stop          - Stop all running processes"
+	@echo "  clean         - Remove build artifacts and dependencies"
+	@echo "  hash          - Migrate student IDs to SHA-256 hashes"
+
+install: system-deps backend-deps frontend-deps setup-db build-frontend
+	@echo ""
+	@echo "=============================================="
+	@echo "Installation complete!"
+	@echo "Run 'make run' to start the application."
+	@echo "Frontend: http://localhost:3001"
+	@echo "Backend:  http://localhost:8001"
+	@echo "=============================================="
+
+# =============================================================================
+# System Dependencies
+# =============================================================================
 
 system-deps:
-	@echo "Installing System Dependencies (requires sudo)..."
+	@echo "=============================================="
+	@echo "Installing System Dependencies..."
+	@echo "=============================================="
 	sudo apt-get update
-	sudo apt-get install -y python3 python3-pip python3-venv curl unzip mysql-server
-	@# Install Chromium and Driver (Try chromium-browser/chromedriver first, then chromium/chromium-driver)
-	sudo apt-get install -y chromium-browser chromium-chromedriver || sudo apt-get install -y chromium chromium-driver
-	@# Install Node.js 18.x if not present
+	@# Python
+	sudo apt-get install -y python3 python3-pip python3-venv
+	@# Build tools and utilities
+	sudo apt-get install -y curl unzip wget gnupg ca-certificates
+	@# MySQL
+	sudo apt-get install -y mysql-server
+	@# Install Google Chrome (stable) for better Selenium compatibility
+	@if ! command -v google-chrome >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1; then \
+		echo "Installing Google Chrome..."; \
+		wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+		sudo dpkg -i /tmp/google-chrome.deb || sudo apt-get install -f -y && \
+		rm -f /tmp/google-chrome.deb; \
+	else \
+		echo "Chrome/Chromium is already installed."; \
+	fi
+	@# Fallback: Install chromium if Google Chrome failed
+	@if ! command -v google-chrome >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1; then \
+		echo "Installing Chromium as fallback..."; \
+		sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium; \
+	fi
+	@# Install Node.js 20.x LTS
 	@if ! command -v node >/dev/null 2>&1; then \
-		echo "Installing Node.js 18.x..."; \
-		curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -; \
+		echo "Installing Node.js 20.x LTS..."; \
+		curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
 		sudo apt-get install -y nodejs; \
 	else \
-		echo "Node.js is already installed."; \
+		NODE_VERSION=$$(node --version); \
+		echo "Node.js $$NODE_VERSION is already installed."; \
 	fi
+	@echo "System dependencies installed."
+
+# =============================================================================
+# Database Setup
+# =============================================================================
 
 setup-db:
-	@echo "Setting up Local MySQL Database..."
-	@# Ensure MySQL is running
-	sudo service mysql start || sudo systemctl start mysql || echo "Could not start MySQL service, please start it manually."
+	@echo "=============================================="
+	@echo "Setting up MySQL Database..."
+	@echo "=============================================="
+	@# Start MySQL service
+	sudo service mysql start || sudo systemctl start mysql || echo "Warning: Could not start MySQL service"
+	@# Wait for MySQL to be ready
+	@for i in 1 2 3 4 5; do \
+		if sudo mysqladmin ping --silent 2>/dev/null; then \
+			break; \
+		fi; \
+		echo "Waiting for MySQL to start... ($$i/5)"; \
+		sleep 2; \
+	done
 	@# Create Database and User
-	@echo "Configuring MySQL users and database..."
-	sudo mysql -e "CREATE DATABASE IF NOT EXISTS seiseki;"
+	sudo mysql -e "CREATE DATABASE IF NOT EXISTS seiseki CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 	sudo mysql -e "CREATE USER IF NOT EXISTS 'seiseki'@'localhost' IDENTIFIED BY 'seiseki-mitai';" || true
 	sudo mysql -e "CREATE USER IF NOT EXISTS 'seiseki'@'127.0.0.1' IDENTIFIED BY 'seiseki-mitai';" || true
+	sudo mysql -e "ALTER USER 'seiseki'@'localhost' IDENTIFIED BY 'seiseki-mitai';" || true
+	sudo mysql -e "ALTER USER 'seiseki'@'127.0.0.1' IDENTIFIED BY 'seiseki-mitai';" || true
 	sudo mysql -e "GRANT ALL PRIVILEGES ON seiseki.* TO 'seiseki'@'localhost';"
 	sudo mysql -e "GRANT ALL PRIVILEGES ON seiseki.* TO 'seiseki'@'127.0.0.1';"
 	sudo mysql -e "FLUSH PRIVILEGES;"
 	@echo "MySQL Database configured."
 
+# =============================================================================
+# Backend Dependencies
+# =============================================================================
+
 backend-deps:
-	@echo "Setting up Python Virtual Environment..."
+	@echo "=============================================="
+	@echo "Setting up Backend (Python)..."
+	@echo "=============================================="
+	@# Create virtual environment
 	cd waseda-grade-api && python3 -m venv .venv
-	@echo "Installing Backend Dependencies..."
+	@# Upgrade pip
+	cd waseda-grade-api && .venv/bin/pip install --upgrade pip
+	@# Install dependencies
 	cd waseda-grade-api && .venv/bin/pip install -r requirements.txt
+	@echo "Backend dependencies installed."
+
+# =============================================================================
+# Frontend Dependencies
+# =============================================================================
 
 frontend-deps:
-	@echo "Installing Frontend Dependencies..."
+	@echo "=============================================="
+	@echo "Setting up Frontend (Node.js)..."
+	@echo "=============================================="
 	cd frontend && npm install
+	@echo "Frontend dependencies installed."
 
 build-frontend:
+	@echo "=============================================="
 	@echo "Building Frontend for Production..."
+	@echo "=============================================="
 	cd frontend && npm run build
+	@echo "Frontend build complete."
+
+# =============================================================================
+# Run Targets
+# =============================================================================
 
 run:
-	@echo "Checking memory status..."
-	@free -h || true
-	@echo "Starting Process Manager..."
+	@echo "=============================================="
+	@echo "Starting Application..."
+	@echo "=============================================="
+	@# Ensure MySQL is running
+	@sudo service mysql start || sudo systemctl start mysql || true
+	@free -h 2>/dev/null || true
+	@echo ""
 	python3 run.py
+
+run-backend:
+	@echo "Starting Backend only..."
+	@sudo service mysql start || sudo systemctl start mysql || true
+	cd waseda-grade-api && .venv/bin/python main.py
+
+run-frontend:
+	@echo "Starting Frontend only..."
+	cd frontend && BACKEND_URL=http://127.0.0.1:8001 npm start
+
+# =============================================================================
+# Utility Targets
+# =============================================================================
+
+stop:
+	@echo "Stopping all processes..."
+	@-pkill -f "python.*main.py" 2>/dev/null || true
+	@-pkill -f "node.*next" 2>/dev/null || true
+	@-pkill -f "chrome" 2>/dev/null || true
+	@-pkill -f "chromedriver" 2>/dev/null || true
+	@echo "Processes stopped."
+
+clean:
+	@echo "Cleaning up..."
+	rm -rf waseda-grade-api/.venv
+	rm -rf frontend/node_modules
+	rm -rf frontend/.next
+	@echo "Clean complete."
 
 hash:
 	@echo "Migrating student IDs to SHA-256 hashes..."
 	cd waseda-grade-api && .venv/bin/python migrate_hashes.py
-	@echo "Starting servers using Python script..."
-	@python3 run.py
+
+# =============================================================================
+# Development Targets
+# =============================================================================
+
+dev-frontend:
+	@echo "Starting Frontend in development mode..."
+	cd frontend && BACKEND_URL=http://127.0.0.1:8001 npm run dev
+
+lint:
+	@echo "Running linter..."
+	cd frontend && npm run lint
