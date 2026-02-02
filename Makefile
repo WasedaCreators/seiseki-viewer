@@ -90,33 +90,16 @@ setup-db:
 	@# Start MySQL service
 	sudo service mysql start || sudo systemctl start mysql || echo "Warning: Could not start MySQL service"
 	@# Wait for MySQL to be ready
-	@for i in 1 2 3 4 5; do \
-		if sudo mysqladmin ping --silent 2>/dev/null; then \
-			break; \
-		fi; \
-		echo "Waiting for MySQL to start... ($$i/5)"; \
-		sleep 2; \
-	done
-	@# Fix MySQL root authentication if needed (Ubuntu 22.04)
-	@sudo mysql -e "SELECT 1" 2>/dev/null || ( \
-		echo "Fixing MySQL root authentication..."; \
-		sudo mysqld_safe --skip-grant-tables &; \
-		sleep 3; \
-		sudo mysql -e "FLUSH PRIVILEGES; ALTER USER 'root'@'localhost' IDENTIFIED WITH auth_socket;" 2>/dev/null || true; \
-		sudo pkill -f mysqld_safe 2>/dev/null || true; \
-		sleep 2; \
-		sudo service mysql restart || sudo systemctl restart mysql; \
-		sleep 3 \
-	)
-	@# Create Database and User
-	sudo mysql -e "CREATE DATABASE IF NOT EXISTS seiseki CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-	sudo mysql -e "CREATE USER IF NOT EXISTS 'seiseki'@'localhost' IDENTIFIED BY 'seiseki-mitai';" || true
-	sudo mysql -e "CREATE USER IF NOT EXISTS 'seiseki'@'127.0.0.1' IDENTIFIED BY 'seiseki-mitai';" || true
-	sudo mysql -e "ALTER USER 'seiseki'@'localhost' IDENTIFIED BY 'seiseki-mitai';" || true
-	sudo mysql -e "ALTER USER 'seiseki'@'127.0.0.1' IDENTIFIED BY 'seiseki-mitai';" || true
-	sudo mysql -e "GRANT ALL PRIVILEGES ON seiseki.* TO 'seiseki'@'localhost';"
-	sudo mysql -e "GRANT ALL PRIVILEGES ON seiseki.* TO 'seiseki'@'127.0.0.1';"
-	sudo mysql -e "FLUSH PRIVILEGES;"
+	@sleep 3
+	@# Create Database and User (using sudo mysql which uses auth_socket)
+	-sudo mysql -e "CREATE DATABASE IF NOT EXISTS seiseki CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+	-sudo mysql -e "CREATE USER IF NOT EXISTS 'seiseki'@'localhost' IDENTIFIED BY 'seiseki-mitai';"
+	-sudo mysql -e "CREATE USER IF NOT EXISTS 'seiseki'@'127.0.0.1' IDENTIFIED BY 'seiseki-mitai';"
+	-sudo mysql -e "ALTER USER 'seiseki'@'localhost' IDENTIFIED BY 'seiseki-mitai';"
+	-sudo mysql -e "ALTER USER 'seiseki'@'127.0.0.1' IDENTIFIED BY 'seiseki-mitai';"
+	-sudo mysql -e "GRANT ALL PRIVILEGES ON seiseki.* TO 'seiseki'@'localhost';"
+	-sudo mysql -e "GRANT ALL PRIVILEGES ON seiseki.* TO 'seiseki'@'127.0.0.1';"
+	-sudo mysql -e "FLUSH PRIVILEGES;"
 	@echo "MySQL Database configured."
 	@echo "  Database: seiseki"
 	@echo "  User: seiseki"
