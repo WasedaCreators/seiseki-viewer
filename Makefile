@@ -191,14 +191,14 @@ migrate-db:
 	@echo "=============================================="
 	@sudo service mysql start || sudo systemctl start mysql || true
 	@# Add lab preference columns if they don't exist
-	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_1 VARCHAR(50);" 2>/dev/null || echo "lab_choice_1 column already exists"
-	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_2 VARCHAR(50);" 2>/dev/null || echo "lab_choice_2 column already exists"
-	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_3 VARCHAR(50);" 2>/dev/null || echo "lab_choice_3 column already exists"
-	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_4 VARCHAR(50);" 2>/dev/null || echo "lab_choice_4 column already exists"
-	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_5 VARCHAR(50);" 2>/dev/null || echo "lab_choice_5 column already exists"
-	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_6 VARCHAR(50);" 2>/dev/null || echo "lab_choice_6 column already exists"
-	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN uses_recommendation BOOLEAN;" 2>/dev/null || echo "uses_recommendation column already exists"
-	sudo mysql seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_updated_at DATETIME;" 2>/dev/null || echo "lab_updated_at column already exists"
+	-mysql -u seiseki -pseiseki-mitai seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_1 VARCHAR(50);" 2>/dev/null || echo "lab_choice_1 column already exists"
+	-mysql -u seiseki -pseiseki-mitai seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_2 VARCHAR(50);" 2>/dev/null || echo "lab_choice_2 column already exists"
+	-mysql -u seiseki -pseiseki-mitai seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_3 VARCHAR(50);" 2>/dev/null || echo "lab_choice_3 column already exists"
+	-mysql -u seiseki -pseiseki-mitai seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_4 VARCHAR(50);" 2>/dev/null || echo "lab_choice_4 column already exists"
+	-mysql -u seiseki -pseiseki-mitai seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_5 VARCHAR(50);" 2>/dev/null || echo "lab_choice_5 column already exists"
+	-mysql -u seiseki -pseiseki-mitai seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_choice_6 VARCHAR(50);" 2>/dev/null || echo "lab_choice_6 column already exists"
+	-mysql -u seiseki -pseiseki-mitai seiseki -e "ALTER TABLE gpadata ADD COLUMN uses_recommendation BOOLEAN;" 2>/dev/null || echo "uses_recommendation column already exists"
+	-mysql -u seiseki -pseiseki-mitai seiseki -e "ALTER TABLE gpadata ADD COLUMN lab_updated_at DATETIME;" 2>/dev/null || echo "lab_updated_at column already exists"
 	@echo "Database migration complete."
 
 show-schema:
@@ -206,7 +206,7 @@ show-schema:
 	@echo "Current Database Schema (gpadata table):"
 	@echo "=============================================="
 	@sudo service mysql start || sudo systemctl start mysql || true
-	sudo mysql seiseki -e "DESCRIBE gpadata;"
+	mysql -u seiseki -pseiseki-mitai seiseki -e "DESCRIBE gpadata;"
 
 show-database:
 	@echo "=============================================="
@@ -215,13 +215,13 @@ show-database:
 	@sudo service mysql start || sudo systemctl start mysql || true
 	@echo ""
 	@echo "--- Summary ---"
-	@sudo mysql seiseki -e "SELECT COUNT(*) AS '総レコード数', COUNT(avg_gpa) AS 'GPA登録数', COUNT(lab_choice_1) AS '研究室志望登録数' FROM gpadata;"
+	@mysql -u seiseki -pseiseki-mitai seiseki -e "SELECT COUNT(*) AS '総レコード数', COUNT(avg_gpa) AS 'GPA登録数', COUNT(lab_choice_1) AS '研究室志望登録数' FROM gpadata;" 2>/dev/null || echo "No data or table not found"
 	@echo ""
 	@echo "--- GPA Data (student_id is hashed) ---"
-	@sudo mysql seiseki -e "SELECT CONCAT(LEFT(student_id, 8), '...') AS student_id_short, ROUND(avg_gpa, 2) AS avg_gpa, timestamp FROM gpadata WHERE avg_gpa IS NOT NULL ORDER BY timestamp DESC LIMIT 20;" 2>/dev/null || echo "No GPA data"
+	@mysql -u seiseki -pseiseki-mitai seiseki -e "SELECT CONCAT(LEFT(student_id, 8), '...') AS student_id_short, ROUND(avg_gpa, 2) AS avg_gpa, timestamp FROM gpadata WHERE avg_gpa IS NOT NULL ORDER BY timestamp DESC LIMIT 20;" 2>/dev/null || echo "No GPA data"
 	@echo ""
 	@echo "--- Lab Preferences ---"
-	@sudo mysql seiseki -e "SELECT CONCAT(LEFT(student_id, 8), '...') AS student_id_short, lab_choice_1 AS '第1希望', lab_choice_2 AS '第2希望', lab_choice_3 AS '第3希望', CASE WHEN uses_recommendation THEN '○' ELSE '×' END AS '自己推薦', lab_updated_at FROM gpadata WHERE lab_choice_1 IS NOT NULL ORDER BY lab_updated_at DESC LIMIT 20;" 2>/dev/null || echo "No lab preference data"
+	@mysql -u seiseki -pseiseki-mitai seiseki -e "SELECT CONCAT(LEFT(student_id, 8), '...') AS student_id_short, lab_choice_1 AS '第1希望', lab_choice_2 AS '第2希望', lab_choice_3 AS '第3希望', CASE WHEN uses_recommendation THEN '○' ELSE '×' END AS '自己推薦', lab_updated_at FROM gpadata WHERE lab_choice_1 IS NOT NULL ORDER BY lab_updated_at DESC LIMIT 20;" 2>/dev/null || echo "No lab preference data"
 	@echo ""
 	@echo "(Showing latest 20 records each)"
 
