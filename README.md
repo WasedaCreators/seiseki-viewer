@@ -7,7 +7,7 @@
 
 - **Frontend**: Next.js (Port 3001)
 - **Backend**: Python FastAPI + Selenium (Port 8001)
-- **Database**: MySQL
+- **Database**: MySQL (user: `seiseki`, password: `seiseki-mitai`)
 
 ## クイックスタート (Ubuntu 22.04)
 
