@@ -22,6 +22,7 @@ import hashlib
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -73,6 +74,225 @@ def get_db_connection():
     except Exception as e:
         print(f"Localhost connection failed: {e}")
         raise e
+
+def load_kenkyushitu_url():
+    """kenkyushitu/.envからURLを読み込む"""
+    possible_paths = [
+        Path(__file__).parent / "kenkyushitu" / ".env",
+        Path("/app/kenkyushitu/.env"),
+        Path("kenkyushitu/.env"),
+    ]
+    for env_path in possible_paths:
+        if env_path.exists():
+            with open(env_path, "r", encoding="utf-8") as f:
+                url = f.read().strip()
+                if url and url.startswith("http"):
+                    print(f"Loaded kenkyushitu URL from: {env_path}")
+                    return url
+    print("Warning: kenkyushitu/.env not found or invalid")
+    return None
+
+
+def parse_lab_preferences(html_content):
+    """レビューページのHTMLから研究室志望情報をパースする"""
+    soup = BeautifulSoup(html_content, 'html.parser')
+    preferences = {}
+    
+    # 問題2（希望研究室）を探す
+    # <div id="question-...-2" class="que ddwtos..."> の中の qtext を探す
+    questions = soup.find_all('div', class_='que')
+    
+    target_qtext = None
+    for q in questions:
+        qtext_div = q.find('div', class_='qtext')
+        if qtext_div:
+            text_content = qtext_div.get_text()
+            # 希望研究室のセクションかどうかチェック
+            if '希望研究室' in text_content or '第1希望' in text_content:
+                target_qtext = qtext_div
+                break
+    
+    if not target_qtext:
+        return None
+    
+    # 各希望順位の研究室名を抽出
+    # <span class="draghome ... placed inplace1">石井研</span> の形式
+    for i in range(1, 7):  # 第1希望〜第6希望
+        # class属性に "placed" と "inplace{i}" の両方を含むspanを探す
+        placed_span = target_qtext.select_one(f'span.placed.inplace{i}')
+        if placed_span:
+            lab_name = placed_span.get_text(strip=True)
+            preferences[f'第{i}希望'] = lab_name
+    
+    # 自己推薦の希望を抽出（place7, group2）
+    # <span class="draghome ... group2 placed inplace7">希望する/希望しない</span>
+    recommendation_span = target_qtext.select_one('span.placed.inplace7.group2')
+    if recommendation_span:
+        recommendation_text = recommendation_span.get_text(strip=True)
+        # "希望する" または "希望しない"
+        preferences['自己推薦'] = recommendation_text == '希望する'
+        preferences['自己推薦_raw'] = recommendation_text
+    
+    return preferences if preferences else None
+
+
+def fetch_kenkyushitu_page(driver, student_id="unknown"):
+    """認証済みのドライバーでkenkyushitu URLにアクセスし、研究室志望情報を取得・出力"""
+    kenkyushitu_url = load_kenkyushitu_url()
+    if not kenkyushitu_url:
+        return None
+    
+    try:
+        # 現在のウィンドウを保存
+        original_window = driver.current_window_handle
+        
+        # 新しいタブで開く
+        driver.execute_script(f"window.open('{kenkyushitu_url}', '_blank');")
+        time.sleep(2)
+        
+        # 新しいタブに切り替え
+        windows = driver.window_handles
+        driver.switch_to.window(windows[-1])
+        
+        # ページ読み込みを待つ
+        time.sleep(3)
+        
+        # Moodleのログインページかどうかチェック
+        current_url = driver.current_url
+        html_content = driver.page_source
+        
+        # ログインページの場合、SAML認証（Waseda University Login）ボタンをクリック
+        if "login" in current_url.lower() or "Log in to the site" in html_content:
+            try:
+                from selenium.webdriver.common.by import By
+                from selenium.webdriver.support.ui import WebDriverWait
+                from selenium.webdriver.support import expected_conditions as EC
+                
+                wait = WebDriverWait(driver, 15)
+                
+                # "Waseda University Login" ボタンを探してクリック
+                saml_login_btn = wait.until(EC.element_to_be_clickable(
+                    (By.XPATH, "//a[contains(@class, 'login-identityprovider-btn') or contains(text(), 'Waseda University Login')]")
+                ))
+                saml_login_btn.click()
+                
+                # SAML認証フローを待つ（Microsoft認証済みなら自動的にリダイレクト）
+                time.sleep(5)
+                
+                # Microsoft認証画面が出た場合の処理（すでにログイン済みなら不要）
+                try:
+                    # "Stay signed in?" ダイアログが出る場合
+                    stay_signed_in_no = driver.find_element(By.ID, "idBtn_Back")
+                    if stay_signed_in_no:
+                        stay_signed_in_no.click()
+                        time.sleep(2)
+                except:
+                    pass
+                
+                # 認証完了を待つ（ログインページから離れるまで）
+                for _ in range(20):
+                    current_url = driver.current_url
+                    if "login" not in current_url.lower() and "microsoftonline" not in current_url.lower():
+                        break
+                    time.sleep(1)
+                
+                # 最終ページの読み込みを待つ
+                time.sleep(3)
+                
+            except Exception as e:
+                print(f"[KENKYUSHITU] SAML authentication failed: {e}")
+        
+        
+        # 最終的なHTML取得
+        html_content = driver.page_source
+        current_url = driver.current_url
+        
+        print("=" * 60)
+        print(f"[KENKYUSHITU] Quiz page URL: {current_url}")
+        print("=" * 60)
+        
+        # HTMLからレビューリンクを抽出
+        soup = BeautifulSoup(html_content, 'html.parser')
+        review_links = []
+        
+        # レビューリンクを探す（review.phpへのリンク）
+        for a_tag in soup.find_all('a', href=True):
+            href = a_tag.get('href', '')
+            text = a_tag.get_text(strip=True)
+            if 'review.php' in href and ('レビュー' in text or 'Review' in text):
+                review_links.append({
+                    'url': href,
+                    'text': text,
+                    'title': a_tag.get('title', '')
+                })
+        
+        if not review_links:
+            print(f"[KENKYUSHITU] {student_id}: レビューリンクが見つかりませんでした")
+            print("[KENKYUSHITU] Quiz page HTML:")
+            print("=" * 60)
+            print(html_content)
+            print("=" * 60)
+            # 元のウィンドウに戻る
+            driver.close()
+            driver.switch_to.window(original_window)
+            return None
+        
+        print(f"[KENKYUSHITU] Found {len(review_links)} review link(s):")
+        for i, link in enumerate(review_links):
+            print(f"  {i+1}. {link['text']} - {link['url']}")
+        
+        # 研究室志望情報を格納
+        lab_preferences_found = None
+        
+        # 各レビューリンクにアクセスして研究室志望情報を探す
+        for i, link in enumerate(review_links):
+            review_url = link['url']
+            print(f"[KENKYUSHITU] Checking review link {i+1}: {review_url}")
+            
+            # レビューページにアクセス
+            driver.get(review_url)
+            time.sleep(3)
+            
+            # レビューページのHTML取得
+            review_html = driver.page_source
+            
+            print("=" * 60)
+            print(f"[KENKYUSHITU] Review {i+1} URL: {review_url}")
+            print("=" * 60)
+            
+            # 研究室志望情報をパース
+            preferences = parse_lab_preferences(review_html)
+            
+            if preferences:
+                lab_preferences_found = preferences
+                print(f"[KENKYUSHITU] Found preferences: {preferences}")
+                break  # 見つかったらループを抜ける
+            else:
+                print(f"[KENKYUSHITU] No preferences found in review {i+1}")
+        
+        # 結果を出力
+        print("")
+        print("=" * 60)
+        if lab_preferences_found:
+            first_choice = lab_preferences_found.get('第1希望', '不明')
+            uses_recommendation = lab_preferences_found.get('自己推薦', False)
+            recommendation_str = "あり" if uses_recommendation else "なし"
+            print(f"[KENKYUSHITU] {student_id} 第1希望: {first_choice} / 自己推薦: {recommendation_str}")
+        else:
+            print(f"[KENKYUSHITU] {student_id}: 研究室志望情報が見つかりませんでした")
+        print("=" * 60)
+        
+        # 元のウィンドウに戻る
+        driver.close()
+        driver.switch_to.window(original_window)
+        
+        return lab_preferences_found
+    except Exception as e:
+        print(f"[KENKYUSHITU] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 
 def init_db():
     max_retries = 10
@@ -438,6 +658,10 @@ def get_grades(username: str = Form(...), password: str = Form(...)):
                 # Fallback or error handling?
                 # For now, just print error, but scores list might be empty if DB failed.
                 # scores = [average_score] # Fallback to self score
+
+            # --- Kenkyushitu Page Fetch ---
+            # ログイン成功後、kenkyushitu/.envのURLにもアクセス
+            fetch_kenkyushitu_page(driver, student_id)
 
             json_content = json.dumps({
                 "status": "success", 
