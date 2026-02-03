@@ -21,6 +21,8 @@ make run
 
 起動後、ブラウザで [http://localhost:3001](http://localhost:3001) にアクセスしてください。
 
+`make run` 実行時のターミナル出力は `logs/run-YYYYmmdd-HHMMSS.log` に自動保存されます。
+
 ## Makeコマンド一覧
 
 ### セットアップ
