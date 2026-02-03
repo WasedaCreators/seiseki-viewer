@@ -3,9 +3,63 @@ import time
 import signal
 import sys
 import os
+import threading
+import datetime
 
 # Force unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
+
+class TeeStream:
+    def __init__(self, streams, lock):
+        self.streams = streams
+        self.lock = lock
+
+    def write(self, data):
+        if not data:
+            return
+        with self.lock:
+            for s in self.streams:
+                try:
+                    s.write(data)
+                except Exception:
+                    pass
+
+    def flush(self):
+        with self.lock:
+            for s in self.streams:
+                try:
+                    s.flush()
+                except Exception:
+                    pass
+
+    def isatty(self):
+        return any(getattr(s, "isatty", lambda: False)() for s in self.streams)
+
+    def fileno(self):
+        for s in self.streams:
+            if hasattr(s, "fileno"):
+                try:
+                    return s.fileno()
+                except Exception:
+                    continue
+        raise OSError("No valid fileno")
+
+def start_stream_forwarder(stream, target):
+    def _forward():
+        try:
+            for line in iter(stream.readline, ""):
+                target.write(line)
+                target.flush()
+        except Exception:
+            pass
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
+    t = threading.Thread(target=_forward, daemon=True)
+    t.start()
+    return t
 
 def cleanup_stale_processes():
     print("Cleaning up stale Chrome/Driver processes...")
@@ -16,10 +70,23 @@ def cleanup_stale_processes():
         pass
 
 def run_server():
+    base_dir = os.getcwd()
+    logs_dir = os.path.join(base_dir, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    log_filename = datetime.datetime.now().strftime("run-%Y%m%d-%H%M%S.log")
+    log_path = os.path.join(logs_dir, log_filename)
+
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    log_file = open(log_path, "a", encoding="utf-8", buffering=1)
+    tee_lock = threading.Lock()
+    sys.stdout = TeeStream([original_stdout, log_file], tee_lock)
+    sys.stderr = TeeStream([original_stderr, log_file], tee_lock)
+
+    print(f"Logging all output to: {log_path}")
     print("Starting Waseda Grade Scraper System...")
     
     # Define paths
-    base_dir = os.getcwd()
     backend_dir = os.path.join(base_dir, "waseda-grade-api")
     frontend_dir = os.path.join(base_dir, "frontend")
     
@@ -50,6 +117,7 @@ def run_server():
     env["BACKEND_URL"] = "http://127.0.0.1:8001"
     
     processes = []
+    stream_threads = []
 
     try:
         # Check if port 8001 is already in use
@@ -69,9 +137,21 @@ def run_server():
              print("Please run 'make install' first.")
              sys.exit(1)
              
-        backend_cmd = [backend_python, "main.py"]
-        backend_proc = subprocess.Popen(backend_cmd, cwd=backend_dir)
+        backend_env = os.environ.copy()
+        backend_env["PYTHONUNBUFFERED"] = "1"
+        backend_cmd = [backend_python, "-u", "main.py"]
+        backend_proc = subprocess.Popen(
+            backend_cmd,
+            cwd=backend_dir,
+            env=backend_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
         processes.append(backend_proc)
+        stream_threads.append(start_stream_forwarder(backend_proc.stdout, sys.stdout))
+        stream_threads.append(start_stream_forwarder(backend_proc.stderr, sys.stderr))
         
         # Wait for backend to be ready
         print("Waiting for backend to start on port 8001...")
@@ -95,8 +175,18 @@ def run_server():
         # Start Frontend
         print("Starting Frontend (Next.js)...")
         frontend_cmd = ["npm", "start"]
-        frontend_proc = subprocess.Popen(frontend_cmd, cwd=frontend_dir, env=env)
+        frontend_proc = subprocess.Popen(
+            frontend_cmd,
+            cwd=frontend_dir,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
         processes.append(frontend_proc)
+        stream_threads.append(start_stream_forwarder(frontend_proc.stdout, sys.stdout))
+        stream_threads.append(start_stream_forwarder(frontend_proc.stderr, sys.stderr))
         
         print("Both servers are running. Press Ctrl+C to stop.")
         
@@ -125,6 +215,15 @@ def run_server():
                 p.kill()
         
         print("Servers stopped.")
+        for t in stream_threads:
+            t.join(timeout=2)
+        try:
+            log_file.flush()
+            log_file.close()
+        except Exception:
+            pass
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
 
 if __name__ == "__main__":
     run_server()
