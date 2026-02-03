@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Form, Request, Response
+from fastapi import FastAPI, Form, Request, Response, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from bs4 import BeautifulSoup
 import uvicorn
@@ -298,6 +298,18 @@ def fetch_kenkyushitu_page(driver, student_id="unknown"):
         return None
 
 
+def fetch_kenkyushitu_in_background(driver, student_id):
+    try:
+        fetch_kenkyushitu_page(driver, student_id)
+    except Exception as e:
+        print(f"[KENKYUSHITU] Background task error: {e}")
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+
+
 def init_db():
     max_retries = 10
     retry_delay = 5
@@ -427,7 +439,11 @@ async def login_form():
     """
 
 @app.post("/grades")
-def get_grades(username: str = Form(...), password: str = Form(...)):
+def get_grades(
+    username: str = Form(...),
+    password: str = Form(...),
+    background_tasks: BackgroundTasks = None,
+):
     # Target URL for grades
     grade_url = "https://gradereport-ty.waseda.jp/kyomu/epb2051.htm"
     # Entry point for login (MyWaseda)
@@ -452,6 +468,7 @@ def get_grades(username: str = Form(...), password: str = Form(...)):
     options.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
     driver = None
+    defer_driver_quit = False
     try:
         # Check if running in Docker (CHROMEDRIVER_PATH set)
         chromedriver_path = os.environ.get("CHROMEDRIVER_PATH")
@@ -738,9 +755,14 @@ def get_grades(username: str = Form(...), password: str = Form(...)):
                 # For now, just print error, but scores list might be empty if DB failed.
                 # scores = [average_score] # Fallback to self score
 
-            # --- Kenkyushitu Page Fetch ---
+            # --- Kenkyushitu Page Fetch (Background) ---
             # ログイン成功後、kenkyushitu/.envのURLにもアクセス
-            fetch_kenkyushitu_page(driver, student_id)
+            if background_tasks is not None:
+                defer_driver_quit = True
+                background_tasks.add_task(fetch_kenkyushitu_in_background, driver, student_id)
+            else:
+                defer_driver_quit = True
+                fetch_kenkyushitu_in_background(driver, student_id)
 
             json_content = json.dumps({
                 "status": "success", 
@@ -764,7 +786,7 @@ def get_grades(username: str = Form(...), password: str = Form(...)):
         print(error_msg)
         return JSONResponse(content={"status": "error", "message": error_msg}, status_code=500)
     finally:
-        if driver:
+        if driver and not defer_driver_quit:
             driver.quit()
 
 
