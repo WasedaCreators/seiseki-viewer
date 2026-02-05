@@ -49,10 +49,8 @@ make run
 
 | コマンド | 説明 |
 |----------|------|
-| `make migrate-db` | 研究室志望カラムを既存DBに追加 |
 | `make show-schema` | gpadataテーブルの構造を表示 |
 | `make show-database` | データベースの中身を表示（GPA・研究室志望） |
-| `make hash` | 学生IDをSHA-256ハッシュに移行(グループラインに公開した段階でハッシュ化は導入済みのため廃止予定) |
 
 ### その他
 
