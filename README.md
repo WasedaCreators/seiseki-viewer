@@ -83,9 +83,6 @@ docker compose up -d --build
 
 | カラム | 型 | 説明 |
 |--------|------|------|
-| student_id | VARCHAR(64) | 学生ID（SHA-256ハッシュ） |
+| student_id | VARCHAR(64) | 適当につけた番号 |
 | avg_gpa | FLOAT | 必修科目平均GPA |
 | timestamp | DATETIME | GPA更新日時 |
-| lab_choice_1〜6 | VARCHAR(50) | 第1〜6希望研究室 |
-| uses_recommendation | BOOLEAN | 自己推薦利用有無 |
-| lab_updated_at | DATETIME | 研究室志望更新日時 |
