@@ -61,6 +61,7 @@ export default function Home() {
       setErrorMsg(err.response?.data?.message || 'Connection failed');
       setStage('error');
     }
+    console.log(errorMsg);
   };
 
   const handleRetry = () => {
