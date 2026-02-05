@@ -124,8 +124,8 @@ export default function Home() {
 
       {stage === 'error' && (
         <div className="error-container">
-          <h1 style={{color: 'red'}}>ログイン失敗</h1>
-          <p className="error">{errorMsg}</p>
+          <h1 style={{color: 'red'}}>ログインに失敗しました</h1>
+          <p className="error">Waseda ID または、パスワードが違います</p>
           <button onClick={handleRetry}>やり直す</button>
         </div>
       )}
