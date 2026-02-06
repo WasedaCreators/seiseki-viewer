@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Head from 'next/head';
 import axios from 'axios';
 
 export default function Home() {
@@ -8,6 +9,12 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [progress, setProgress] = useState(0);
+
+  const pageTitle = stage === 'result'
+    ? '計算結果'
+    : stage === 'error'
+      ? 'ログイン失敗'
+      : '総機GPA計算機';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -73,6 +80,9 @@ export default function Home() {
 
   return (
     <div className="container">
+      <Head>
+        <title>{pageTitle}</title>
+      </Head>
       {stage === 'login' && (
         <form onSubmit={handleSubmit}>
           <h1>総機GPAジェネレータ</h1>
