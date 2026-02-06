@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Head from 'next/head';
 import axios from 'axios';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
@@ -165,6 +166,9 @@ export default function Admin() {
   if (!isLoggedIn) {
     return (
       <div className="container" style={{ maxWidth: '400px', margin: '50px auto', textAlign: 'center' }}>
+        <Head>
+          <title>管理者画面</title>
+        </Head>
         <h1>Admin Login</h1>
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: '10px' }}>
@@ -194,6 +198,9 @@ export default function Admin() {
 
   return (
     <div className="container" style={{ maxWidth: '1000px', margin: '20px auto', padding: '20px' }}>
+      <Head>
+        <title>管理者画面</title>
+      </Head>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>管理者画面</h1>
         <button onClick={() => {
